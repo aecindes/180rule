@@ -7,14 +7,15 @@
   <style>
     :root{--bg:#0f1724;--panel:#0b1220;--muted:#9aa4b2;--accent:#60a5fa}
     html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
-    body{background:linear-gradient(180deg,#071126 0%, #06101a 100%);color:#e6eef6;display:flex;gap:18px;padding:18px}
-    .app{display:flex;flex-direction:row;flex:1;gap:16px}
-    .canvas-wrap{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:12px;flex:1;min-width:520px}
-    .sidebar{width:340px;background:var(--panel);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    body{background:linear-gradient(180deg,#071126 0%, #06101a 100%);color:#e6eef6;display:flex;gap:18px;padding:18px;box-sizing:border-box}
+    *{box-sizing:border-box}
+    .app{display:flex;flex-direction:row;flex:1;gap:16px;min-height:0}
+    .canvas-wrap{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:12px;flex:1;min-width:520px;display:flex;flex-direction:column;min-height:0}
+    .sidebar{width:340px;background:var(--panel);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);min-height:0}
     header{display:flex;align-items:center;gap:12px}
     h1{font-size:16px;margin:0}
-    p{color:var(--muted);margin:6px 0 0 0;font-size:13px}
-    svg{width:100%;height:640px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));}
+    p{color:var(--muted);margin:6px 0 0 0;font-size:13px;line-height:1.35}
+    svg{width:100%;height:100%;flex:1;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));display:block;}
     .controls{display:grid;gap:8px;margin-top:10px}
     button,select,input[type=range]{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
     .row{display:flex;gap:8px}
@@ -26,10 +27,13 @@
     .dot.cam-ok{background:#22c55e}
     .dot.cam-bad{background:#ef4444}
     .dot.subject{background:#f59e0b}
-    .footer{margin-top:12px;color:var(--muted);font-size:13px}
-    .list{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;max-height:220px;overflow:auto}
-    .item-line{display:flex;align-items:center;justify-content:space-between;padding:6px;border-radius:6px}
+    .footer{margin-top:12px;color:var(--muted);font-size:13px;line-height:1.35}
+    .list{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;max-height:240px;overflow:auto}
+    .item-line{display:flex;align-items:center;justify-content:space-between;padding:6px;border-radius:6px;gap:8px}
     .item-line:hover{background:rgba(255,255,255,0.01)}
+    input.name-input{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:6px;border-radius:6px;color:inherit;outline:none}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border-radius:999px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02)}
+    .badgeLegend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
   </style>
 </head>
 <body>
@@ -38,10 +42,10 @@
       <header>
         <div>
           <h1>180° Rule Visualizer</h1>
-          <p>Drag cameras (C) and subjects (S). Select two subjects to define the line of action. Cameras must remain on the same side of that line.</p>
+          <p>Drag cameras (C) and subjects (S). Select two subjects to define the line of action. Mousewheel: zoom canvas; if a subject/camera is selected, wheel rotates it.</p>
         </div>
       </header>
-      <svg id="stage" viewBox="0 0 1200 800"></svg>
+      <svg id="stage" viewBox="0 0 1200 800" tabindex="0"></svg>
     </div>
 
     <aside class="sidebar">
@@ -61,326 +65,567 @@
           <button id="flip-line">Flip Side</button>
         </div>
 
+        <div class="row">
+          <button id="toggle-eyeline">Eyeline: On</button>
+          <button id="eyeline-wide">Cone: ±25°</button>
+        </div>
+
         <div class="list" id="entities-list"></div>
 
         <div class="legend">
-          <div class="item"><div class="dot subject"></div><div class="small">Subject (S)</div></div>
-          <div class="item"><div class="dot cam-ok"></div><div class="small">Camera — OK</div></div>
-          <div class="item"><div class="dot cam-bad"></div><div class="small">Camera — Violates</div></div>
+          <div class="item"><div class="dot subject"></div><div class="small">Subject</div></div>
+          <div class="item"><div class="dot cam-ok"></div><div class="small">Hard axis OK</div></div>
+          <div class="item"><div class="dot cam-bad"></div><div class="small">Hard axis violates</div></div>
         </div>
 
-        <div class="footer">Tip: For multi-subject blocking, pick the two primary characters for the line-of-action. Crossing that line breaks the 180° rule.</div>
+        <div class="badgeLegend">
+          <div class="pill"><span class="small">Fill = Hard axis</span></div>
+          <div class="pill"><span class="small">Stroke = Eyeline axis</span></div>
+          <div class="pill"><span class="small">Badge: H✓/H✕ + E✓/E✕</span></div>
+        </div>
+
+        <div class="footer">Tip: Hard axis is A↔B. Soft/eyeline axis is A→(best target inside A's look cone). A camera can be OK on hard axis but feel "off" if it crosses the active eyeline axis.</div>
       </div>
     </aside>
   </div>
 
 <script>
 (function(){
-  const svg = document.getElementById('stage');
-  const NS = 'http://www.w3.org/2000/svg';
-  let nextId=1;
-  const state={subjects:[],cameras:[],selectedA:null,selectedB:null,showLine:true,flipped:false,selectedEntity:null,view:{x:0,y:0,w:1200,h:800}};
+  // Small, robust single-file interactive stage
+  var svg = document.getElementById('stage');
+  var NS = 'http://www.w3.org/2000/svg';
+  var nextId = 1;
 
-  function createSvg(tag,attrs={}){
-    const el = document.createElementNS(NS,tag);
-    for(const k in attrs) el.setAttribute(k,attrs[k]);
+  var state = {
+    subjects: [],
+    cameras: [],
+    selectedA: null,
+    selectedB: null,
+    showLine: true,
+    flipped: false,
+    selectedEntity: null,
+    view: { x: 0, y: 0, w: 1200, h: 800 },
+
+    // Soft eyeline settings
+    eyelineHalfAngleDeg: 25,
+    eyelineRange: 140,
+    showEyeline: true
+  };
+
+  function createSvg(tag, attrs) {
+    var el = document.createElementNS(NS, tag);
+    attrs = attrs || {};
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
     return el;
   }
 
-  // Background grid
-  const grid = createSvg('g',{id:'grid'});
-  for(let x=0;x<1200;x+=60){const line=createSvg('line',{x1:x,y1:0,x2:x,y2:800,stroke:'rgba(255,255,255,0.02)'});grid.appendChild(line)}
-  for(let y=0;y<800;y+=60){const line=createSvg('line',{x1:0,y1:y,x2:1200,y2:y,stroke:'rgba(255,255,255,0.02)'});grid.appendChild(line)}
+  // layers
+  var grid = createSvg('g', { id: 'grid' });
+  for (var x = 0; x < 1200; x += 60) grid.appendChild(createSvg('line', { x1: x, y1: 0, x2: x, y2: 800, stroke: 'rgba(255,255,255,0.02)' }));
+  for (var y = 0; y < 800; y += 60) grid.appendChild(createSvg('line', { x1: 0, y1: y, x2: 1200, y2: y, stroke: 'rgba(255,255,255,0.02)' }));
   svg.appendChild(grid);
 
-  const layer = createSvg('g',{id:'layer'});
+  var layer = createSvg('g', { id: 'layer' });
   svg.appendChild(layer);
-
-  const lineGroup = createSvg('g',{id:'lineGroup'});
+  var lineGroup = createSvg('g', { id: 'lineGroup' });
   svg.appendChild(lineGroup);
 
-  function rand(min,max){return Math.random()*(max-min)+min}
+  function rand(min, max) { return Math.random() * (max - min) + min; }
 
-  function addSubject(x,y){ const id='S'+(nextId++); const s={id, name:id, x:x||rand(200,900), y:y||rand(150,600)}; state.subjects.push(s); render(); }
-  function addCamera(x,y){ const c={id:'C'+(nextId++),x:x||rand(200,900),y:y||rand(150,600),rot:0}; state.cameras.push(c); render(); }
-
-  // initial items
-  addSubject(360,360); addSubject(760,360);
-  addCamera(200,200); addCamera(1000,200); addCamera(1000,600);
-
-  // UI wiring
-  document.getElementById('add-subject').onclick=()=>addSubject();
-  document.getElementById('add-camera').onclick=()=>addCamera();
-  document.getElementById('toggle-line').onclick=()=>{state.showLine=!state.showLine;render();}
-  document.getElementById('flip-line').onclick=()=>{state.flipped=!state.flipped;render();}
-
-  function populateSelectors(){
-    const aSel=document.getElementById('primaryA'); const bSel=document.getElementById('primaryB');
-    aSel.innerHTML=''; bSel.innerHTML='';
-    const all = [...state.subjects];
-    all.forEach(s=>{
-      const optA = document.createElement('option'); optA.value=s.id; optA.textContent=s.name || s.id; aSel.appendChild(optA);
-      const optB = document.createElement('option'); optB.value=s.id; optB.textContent=s.name || s.id; bSel.appendChild(optB);
-    });
-    if(!state.selectedA && all[0]) state.selectedA = all[0].id;
-    if(!state.selectedB && all[1]) state.selectedB = all[1].id;
-    aSel.value = state.selectedA || (all[0] && all[0].id) || '';
-    bSel.value = state.selectedB || (all[1] && all[1].id) || '';
-    aSel.onchange = ()=>{state.selectedA = aSel.value; render();}
-    bSel.onchange = ()=>{state.selectedB = bSel.value; render();}
+  function addSubject(x, y, heading) {
+    var id = 'S' + (nextId++);
+    var s = {
+      id: id,
+      name: id,
+      x: (typeof x === 'number' ? x : rand(200, 900)),
+      y: (typeof y === 'number' ? y : rand(150, 600)),
+      heading: (typeof heading === 'number' ? heading : 0)
+    };
+    state.subjects.push(s);
+    render();
+    return s;
   }
 
-  function render(){
-    // Keep SVG viewBox synced to current pan/zoom
-    svg.setAttribute('viewBox', `${state.view.x} ${state.view.y} ${state.view.w} ${state.view.h}`);
+  function addCamera(x, y) {
+    var id = 'C' + (nextId++);
+    var c = {
+      id: id,
+      x: (typeof x === 'number' ? x : rand(200, 900)),
+      y: (typeof y === 'number' ? y : rand(150, 600)),
+      rot: 0
+    };
+    state.cameras.push(c);
+    render();
+    return c;
+  }
 
-    layer.innerHTML=''; lineGroup.innerHTML='';
+  // initial
+  addSubject(360, 360, 0);
+  addSubject(760, 360, 180);
+  addCamera(200, 200);
+  addCamera(1000, 200);
+  addCamera(1000, 600);
+
+  // UI wiring
+  document.getElementById('add-subject').onclick = function () { addSubject(); };
+  document.getElementById('add-camera').onclick = function () { addCamera(); };
+  document.getElementById('toggle-line').onclick = function () { state.showLine = !state.showLine; render(); };
+  document.getElementById('flip-line').onclick = function () { state.flipped = !state.flipped; render(); };
+
+  var btnEyeline = document.getElementById('toggle-eyeline');
+  var btnWide = document.getElementById('eyeline-wide');
+
+  btnEyeline.onclick = function(){
+    state.showEyeline = !state.showEyeline;
+    btnEyeline.textContent = 'Eyeline: ' + (state.showEyeline ? 'On' : 'Off');
+    render();
+  };
+
+  btnWide.onclick = function(){
+    // toggle common widths
+    var next = (state.eyelineHalfAngleDeg === 25) ? 15 : (state.eyelineHalfAngleDeg === 15 ? 35 : 25);
+    state.eyelineHalfAngleDeg = next;
+    btnWide.textContent = 'Cone: ±' + next + '°';
+    render();
+  };
+
+  function populateSelectors() {
+    var aSel = document.getElementById('primaryA');
+    var bSel = document.getElementById('primaryB');
+    aSel.innerHTML = '';
+    bSel.innerHTML = '';
+
+    var all = state.subjects.slice();
+    for (var i = 0; i < all.length; i++) {
+      var s = all[i];
+      var optA = document.createElement('option');
+      optA.value = s.id;
+      optA.textContent = s.name || s.id;
+      aSel.appendChild(optA);
+
+      var optB = document.createElement('option');
+      optB.value = s.id;
+      optB.textContent = s.name || s.id;
+      bSel.appendChild(optB);
+    }
+
+    if (!state.selectedA && all[0]) state.selectedA = all[0].id;
+    if (!state.selectedB && all[1]) state.selectedB = all[1].id;
+
+    aSel.value = state.selectedA || (all[0] && all[0].id) || '';
+    bSel.value = state.selectedB || (all[1] && all[1].id) || '';
+
+    aSel.onchange = function () { state.selectedA = aSel.value; render(); };
+    bSel.onchange = function () { state.selectedB = bSel.value; render(); };
+  }
+
+  function describeSemiCircle(cx, cy, dx, dy, nx, ny, r) {
+    var startX = cx + nx * r - dy * 0.02;
+    var startY = cy + ny * r + dx * 0.02;
+    var endX = cx - nx * r - dy * 0.02;
+    var endY = cy - ny * r + dx * 0.02;
+    return 'M ' + startX + ' ' + startY + ' A ' + r + ' ' + r + ' 0 0 0 ' + endX + ' ' + endY + ' L ' + cx + ' ' + cy + ' Z';
+  }
+
+  function angleBetween(A, B, P) {
+    var mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+    var v1x = A.x - B.x, v1y = A.y - B.y;
+    var v2x = P.x - mx, v2y = P.y - my;
+    var dot = v1x * v2x + v1y * v2y;
+    var l1 = Math.hypot(v1x, v1y) || 1;
+    var l2 = Math.hypot(v2x, v2y) || 1;
+    var cos = Math.max(-1, Math.min(1, dot / (l1 * l2)));
+    return Math.acos(cos) * 180 / Math.PI;
+  }
+
+  function angleDegTo(ax, ay, bx, by){
+    return Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
+  }
+
+  function deltaDeg(a, b){
+    // smallest signed difference a->b (degrees)
+    var d = (b - a + 540) % 360 - 180;
+    return d;
+  }
+
+  function sectorPath(cx, cy, headingDeg, halfDeg, r){
+    // SVG wedge centered at headingDeg
+    var a1 = (headingDeg - halfDeg) * Math.PI / 180;
+    var a2 = (headingDeg + halfDeg) * Math.PI / 180;
+    var x1 = cx + Math.cos(a1) * r;
+    var y1 = cy + Math.sin(a1) * r;
+    var x2 = cx + Math.cos(a2) * r;
+    var y2 = cy + Math.sin(a2) * r;
+    var largeArc = (halfDeg * 2) > 180 ? 1 : 0;
+    return 'M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 + ' A ' + r + ' ' + r + ' 0 ' + largeArc + ' 1 ' + x2 + ' ' + y2 + ' Z';
+  }
+
+  function findEyelineTarget(subject){
+    // Best subject inside subject's look cone
+    var half = (state.eyelineHalfAngleDeg || 25);
+    var best = null;
+    var bestScore = 1e9;
+
+    for (var i = 0; i < state.subjects.length; i++) {
+      var other = state.subjects[i];
+      if (other.id === subject.id) continue;
+
+      var angTo = angleDegTo(subject.x, subject.y, other.x, other.y);
+      var d = Math.abs(deltaDeg(subject.heading || 0, angTo));
+      if (d > half) continue;
+
+      var dx = other.x - subject.x, dy = other.y - subject.y;
+      var dist = Math.hypot(dx, dy);
+
+      // prioritize closer + tighter alignment
+      var score = dist + d * 4;
+      if (score < bestScore) {
+        bestScore = score;
+        best = other;
+      }
+    }
+
+    return best;
+  }
+
+  function updateSubjectNameUI(subjectId) {
+    var subj = state.subjects.find(function (s) { return s.id === subjectId; });
+    if (!subj) return;
+
+    var g = layer.querySelector('[data-id="' + subjectId + '"]');
+    if (g) {
+      var t = g.querySelector('text[data-name-label="1"]');
+      if (t) t.textContent = subj.name || subj.id;
+    }
+
+    var aSel = document.getElementById('primaryA');
+    var bSel = document.getElementById('primaryB');
+    [aSel, bSel].forEach(function (sel) {
+      if (!sel) return;
+      Array.prototype.forEach.call(sel.options, function (opt) {
+        if (opt.value === subjectId) opt.textContent = subj.name || subj.id;
+      });
+    });
+  }
+
+  function rebuildList() {
+    var list = document.getElementById('entities-list');
+    list.innerHTML = '';
+
+    var all = state.subjects.concat(state.cameras);
+    for (var i = 0; i < all.length; i++) {
+      var e = all[i];
+      var div = document.createElement('div');
+      div.className = 'item-line';
+
+      var left = document.createElement('div');
+      if (e.name !== undefined) {
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.value = e.name;
+        input.className = 'name-input';
+        input.style.width = '120px';
+        (function (ent, inp) {
+          inp.addEventListener('input', function () {
+            ent.name = inp.value;
+            updateSubjectNameUI(ent.id);
+          });
+        })(e, input);
+        left.appendChild(input);
+      } else {
+        left.textContent = e.id;
+      }
+
+      var right = document.createElement('div');
+      right.innerHTML = '<button data-jump="' + e.id + '">Jump</button> <button data-delete="' + e.id + '">Del</button>';
+
+      div.appendChild(left);
+      div.appendChild(right);
+      list.appendChild(div);
+    }
+
+    Array.prototype.forEach.call(list.querySelectorAll('button[data-jump]'), function (b) {
+      b.onclick = function (ev) {
+        var id = ev.target.getAttribute('data-jump');
+        jumpTo(id);
+      };
+    });
+
+    Array.prototype.forEach.call(list.querySelectorAll('button[data-delete]'), function (b) {
+      b.onclick = function (ev) {
+        var id = ev.target.getAttribute('data-delete');
+        deleteEntity(id);
+      };
+    });
+  }
+
+  function jumpTo(id) {
+    var ent = state.subjects.concat(state.cameras).find(function (x) { return x.id === id; });
+    if (!ent) return;
+    state.view.x = ent.x - state.view.w / 2;
+    state.view.y = ent.y - state.view.h / 2;
+    render();
+  }
+
+  function deleteEntity(id) {
+    state.subjects = state.subjects.filter(function (s) { return s.id !== id; });
+    state.cameras = state.cameras.filter(function (c) { return c.id !== id; });
+    if (state.selectedA === id) state.selectedA = null;
+    if (state.selectedB === id) state.selectedB = null;
+    if (state.selectedEntity === id) state.selectedEntity = null;
+    render();
+  }
+
+  function getPointFromEvent(ev) {
+    var rect = svg.getBoundingClientRect();
+    var vb = state.view;
+    var nx = (ev.clientX - rect.left) / rect.width;
+    var ny = (ev.clientY - rect.top) / rect.height;
+    var x = vb.x + nx * vb.w;
+    var y = vb.y + ny * vb.h;
+    return { x: x, y: y };
+  }
+
+  function render() {
+    // sync viewBox
+    var vb = state.view;
+    svg.setAttribute('viewBox', vb.x + ' ' + vb.y + ' ' + vb.w + ' ' + vb.h);
+
+    layer.innerHTML = '';
+    lineGroup.innerHTML = '';
+
     // draw subjects
-    state.subjects.forEach(s=>{
-      const g=createSvg('g'); g.setAttribute('data-id',s.id);
-      const circle=createSvg('circle',{cx:s.x,cy:s.y,r:16,fill:'#f59e0b',stroke:'#111', 'stroke-width':2});
-      const nameLabel=createSvg('text',{
-        x:s.x,
-        y:s.y-24,
-        'font-size':12,
-        fill:'#e6eef6',
-        'text-anchor':'middle',
-        'paint-order':'stroke',
-        stroke:'rgba(0,0,0,0.65)',
-        'stroke-width':4,
-        'data-name-label':'1'
+    for (var si = 0; si < state.subjects.length; si++) {
+      var s = state.subjects[si];
+      var g = createSvg('g', {});
+      g.setAttribute('data-id', s.id);
+      g.setAttribute('data-type', 'subject');
+
+      // selection outline
+      if (state.selectedEntity === s.id) {
+        var out = createSvg('circle', { cx: s.x, cy: s.y, r: 19, fill: 'none', stroke: '#ffffff', 'stroke-width': 3 });
+        out.setAttribute('pointer-events', 'none');
+        g.appendChild(out);
+      }
+
+      // soft eyeline cone
+      if (state.showEyeline) {
+        var conePath = sectorPath(s.x, s.y, (s.heading || 0), (state.eyelineHalfAngleDeg || 25), (state.eyelineRange || 140));
+        var cone = createSvg('path', { d: conePath, fill: 'rgba(245,158,11,0.08)', stroke: 'rgba(245,158,11,0.18)', 'stroke-width': 1 });
+        cone.setAttribute('pointer-events', 'none');
+        g.appendChild(cone);
+      }
+
+      // body
+      var circle = createSvg('circle', { cx: s.x, cy: s.y, r: 16, fill: '#f59e0b', stroke: '#111', 'stroke-width': 2 });
+
+      // forward triangle (points right in local space)
+      var tri = createSvg('polygon', {
+        points: (s.x + 18) + ',' + s.y + ' ' + (s.x + 6) + ',' + (s.y - 6) + ' ' + (s.x + 6) + ',' + (s.y + 6),
+        fill: '#111'
+      });
+      tri.setAttribute('transform', 'rotate(' + (s.heading || 0) + ' ' + s.x + ' ' + s.y + ')');
+
+      var nameLabel = createSvg('text', {
+        x: s.x,
+        y: s.y - 34,
+        'font-size': 12,
+        fill: '#e6eef6',
+        'text-anchor': 'middle',
+        'paint-order': 'stroke',
+        stroke: 'rgba(0,0,0,0.65)',
+        'stroke-width': 4,
+        'data-name-label': '1'
       });
       nameLabel.textContent = s.name || s.id;
+
       g.appendChild(circle);
+      g.appendChild(tri);
       g.appendChild(nameLabel);
       layer.appendChild(g);
-    });
+    }
 
     // draw cameras
-    state.cameras.forEach(c=>{
-      const g=createSvg('g'); g.setAttribute('data-id',c.id);
-      const rect=createSvg('rect',{x:c.x-12,y:c.y-8,width:24,height:16,rx:4,ry:4,fill:'#8fb3ff',stroke:'#0b1726','stroke-width':2});
-      rect.setAttribute('transform',`rotate(${c.rot||0} ${c.x} ${c.y})`);
-      const lens=createSvg('circle',{cx:c.x+10,cy:c.y, r:4, fill:'#08233a'});
-      lens.setAttribute('transform',`rotate(${c.rot||0} ${c.x} ${c.y})`);
-      const label=createSvg('text',{x:c.x-20,y:c.y+28,'font-size':12,fill:'#9fb7d9'}); label.textContent=c.id;
-      g.appendChild(rect); g.appendChild(lens); g.appendChild(label);
-      layer.appendChild(g);
-    });
+    for (var ci = 0; ci < state.cameras.length; ci++) {
+      var c = state.cameras[ci];
+      var g2 = createSvg('g', {});
+      g2.setAttribute('data-id', c.id);
+      g2.setAttribute('data-type', 'camera');
+
+      // selection outline
+      if (state.selectedEntity === c.id) {
+        var outR = createSvg('rect', { x: c.x - 14, y: c.y - 10, width: 28, height: 20, rx: 6, ry: 6, fill: 'none', stroke: '#ffffff', 'stroke-width': 3 });
+        outR.setAttribute('transform', 'rotate(' + (c.rot || 0) + ' ' + c.x + ' ' + c.y + ')');
+        outR.setAttribute('pointer-events', 'none');
+        g2.appendChild(outR);
+      }
+
+      var rect = createSvg('rect', { x: c.x - 12, y: c.y - 8, width: 24, height: 16, rx: 4, ry: 4, fill: '#8fb3ff', stroke: '#0b1726', 'stroke-width': 2 });
+      rect.setAttribute('transform', 'rotate(' + (c.rot || 0) + ' ' + c.x + ' ' + c.y + ')');
+
+      var lens = createSvg('circle', { cx: c.x + 10, cy: c.y, r: 4, fill: '#08233a' });
+      lens.setAttribute('transform', 'rotate(' + (c.rot || 0) + ' ' + c.x + ' ' + c.y + ')');
+
+      var label = createSvg('text', { x: c.x - 20, y: c.y + 28, 'font-size': 12, fill: '#9fb7d9' });
+      label.textContent = c.id;
+
+      g2.appendChild(rect);
+      g2.appendChild(lens);
+      g2.appendChild(label);
+      layer.appendChild(g2);
+    }
 
     populateSelectors();
 
-    // draw line-of-action
-    const A = state.subjects.find(s=>s.id===state.selectedA);
-    const B = state.subjects.find(s=>s.id===state.selectedB);
-    if(A && B && state.showLine){
-      const L = createSvg('line',{x1:A.x,y1:A.y,x2:B.x,y2:B.y,stroke:'#60a5fa','stroke-width':3,'stroke-dasharray':'8 6'});
+    // Axes
+    var A = state.subjects.find(function (s) { return s.id === state.selectedA; });
+    var B = state.subjects.find(function (s) { return s.id === state.selectedB; });
+
+    // Soft axis (eyeline): A -> best target inside A's cone
+    var E = null;
+    if (A && state.showEyeline) E = findEyelineTarget(A);
+
+    if (A && B && state.showLine) {
+      // Hard axis
+      var L = createSvg('line', { x1: A.x, y1: A.y, x2: B.x, y2: B.y, stroke: '#60a5fa', 'stroke-width': 3, 'stroke-dasharray': '8 6' });
       lineGroup.appendChild(L);
 
-      // draw perpendicular arrow showing allowed side (optional)
-      const mx=(A.x+B.x)/2, my=(A.y+B.y)/2;
-      const dx = B.x-A.x, dy = B.y-A.y;
-      // normal vector
-      let nx = -dy, ny = dx;
-      // normalize
-      const len = Math.hypot(nx,ny)||1; nx/=len; ny/=len;
-      if(state.flipped){ nx *= -1; ny *= -1; }
-      // draw an arrow showing the selected side
-      const arrowEndX = mx + nx*100, arrowEndY = my + ny*100;
-      const sideLine=createSvg('line',{x1:mx,y1:my,x2:arrowEndX,y2:arrowEndY,stroke:'#10b981','stroke-width':2});
-      lineGroup.appendChild(sideLine);
-      // semicircle illustrating 180° arc on that side
-      const arcPath = describeSemiCircle(mx,my, dx,dy, nx,ny,100);
-      const arc=createSvg('path',{d:arcPath,fill:'rgba(16,185,129,0.06)',stroke:'rgba(16,185,129,0.16)'});
-      lineGroup.appendChild(arc);
+      var hmx = (A.x + B.x) / 2;
+      var hmy = (A.y + B.y) / 2;
+      var hdx = B.x - A.x;
+      var hdy = B.y - A.y;
+      var hnx = -hdy;
+      var hny = hdx;
+      var hlen = Math.hypot(hnx, hny) || 1;
+      hnx /= hlen; hny /= hlen;
+      if (state.flipped) { hnx *= -1; hny *= -1; }
 
-      // evaluate cameras side
-      state.cameras.forEach(c=>{
-        const side = Math.sign((c.x - A.x)*(B.y - A.y) - (c.y - A.y)*(B.x - A.x));
-        const refSide = Math.sign(nx*(1) + ny*(0)); // using nx,ny is directional; we'll compute per camera vs normal
-        // Better: compute dot of (camera - midpoint) with normal
-        const dot = (c.x - mx)*nx + (c.y - my)*ny;
-        const ok = dot > 0;
-        // color cameras accordingly
-        const camEl = layer.querySelector('[data-id="'+c.id+'"]');
-        if(camEl){
-          const rect = camEl.querySelector('rect');
-          rect.setAttribute('fill', ok? '#22c55e' : '#ef4444');
+      // Show which side is "kept"
+      var arrowEndX = hmx + hnx * 100;
+      var arrowEndY = hmy + hny * 100;
+      lineGroup.appendChild(createSvg('line', { x1: hmx, y1: hmy, x2: arrowEndX, y2: arrowEndY, stroke: '#10b981', 'stroke-width': 2 }));
+      var arcPath = describeSemiCircle(hmx, hmy, hdx, hdy, hnx, hny, 100);
+      lineGroup.appendChild(createSvg('path', { d: arcPath, fill: 'rgba(16,185,129,0.06)', stroke: 'rgba(16,185,129,0.16)' }));
+
+      // Soft axis normal (if any)
+      var hasSoft = !!E;
+      var smx = 0, smy = 0, snx = 0, sny = 0;
+      if (hasSoft) {
+        lineGroup.appendChild(createSvg('line', { x1: A.x, y1: A.y, x2: E.x, y2: E.y, stroke: 'rgba(167,139,250,0.9)', 'stroke-width': 2, 'stroke-dasharray': '3 6' }));
+
+        smx = (A.x + E.x) / 2;
+        smy = (A.y + E.y) / 2;
+        var sdx = E.x - A.x;
+        var sdy = E.y - A.y;
+        snx = -sdy;
+        sny = sdx;
+        var slen = Math.hypot(snx, sny) || 1;
+        snx /= slen; sny /= slen;
+        if (state.flipped) { snx *= -1; sny *= -1; }
+      }
+
+      // Evaluate cameras: Fill = hard axis, Stroke = eyeline axis
+      for (var k = 0; k < state.cameras.length; k++) {
+        var camObj = state.cameras[k];
+
+        var hardSide = (camObj.x - hmx) * hnx + (camObj.y - hmy) * hny;
+        var hardOk = hardSide > 0;
+
+        var softOk = hardOk;
+        if (hasSoft) {
+          var softSide = (camObj.x - smx) * snx + (camObj.y - smy) * sny;
+          softOk = softSide > 0;
         }
-        // attach small badge showing distance & angle
-        const existingBadge = layer.querySelector('[data-badge="'+c.id+'"]'); if(existingBadge) existingBadge.remove();
-        const badge = createSvg('text',{x:c.x+18,y:c.y-18,'font-size':12,fill:'#cfeef9','data-badge':c.id});
-        const ang = angleBetween(A,B,{x:c.x,y:c.y});
-        badge.textContent = (ok? 'OK ':'✕ ') + Math.round(ang)+'°';
+
+        var camEl = layer.querySelector('[data-id="' + camObj.id + '"]');
+        if (!camEl) continue;
+        var rectEl = camEl.querySelector('rect');
+
+        if (rectEl) {
+          rectEl.setAttribute('fill', hardOk ? '#22c55e' : '#ef4444');
+          rectEl.setAttribute('stroke', hasSoft ? (softOk ? 'rgba(167,139,250,0.95)' : 'rgba(245,158,11,0.95)') : '#0b1726');
+        }
+
+        // Replace badge
+        var existing = layer.querySelector('[data-badge="' + camObj.id + '"]');
+        if (existing) existing.remove();
+
+        var badge = createSvg('text', { x: camObj.x + 18, y: camObj.y - 18, 'font-size': 12, fill: '#cfeef9', 'data-badge': camObj.id });
+        var ang = Math.round(angleBetween(A, B, { x: camObj.x, y: camObj.y }));
+        badge.textContent = (hardOk ? 'H✓ ' : 'H✕ ') + (softOk ? 'E✓ ' : 'E✕ ') + ang + '°';
         layer.appendChild(badge);
-      });
+      }
+
     } else {
-      // if no line, color cameras neutral
-      state.cameras.forEach(c=>{ const camEl=layer.querySelector('[data-id="'+c.id+'"]'); if(camEl){camEl.querySelector('rect').setAttribute('fill','#8fb3ff')}})
+      // no line: neutral camera color & clear soft strokes
+      for (var cc = 0; cc < state.cameras.length; cc++) {
+        var camE = layer.querySelector('[data-id="' + state.cameras[cc].id + '"]');
+        if (!camE) continue;
+        var rr = camE.querySelector('rect');
+        if (rr) {
+          rr.setAttribute('fill', '#8fb3ff');
+          rr.setAttribute('stroke', '#0b1726');
+        }
+        var ex = layer.querySelector('[data-badge="' + state.cameras[cc].id + '"]');
+        if (ex) ex.remove();
+      }
     }
 
     rebuildList();
     enableDrag();
   }
 
-  function describeSemiCircle(cx,cy, dx,dy, nx,ny, r){
-    // build arc path centered at cx,cy offset a bit along normal to avoid overlapping the line
-    const startX = cx + nx*r - dy*0.02; // rotate a touch
-    const startY = cy + ny*r + dx*0.02;
-    const endX = cx - nx*r - dy*0.02;
-    const endY = cy - ny*r + dx*0.02;
-    return `M ${startX} ${startY} A ${r} ${r} 0 0 0 ${endX} ${endY} L ${cx} ${cy} Z`;
-  }
-
-  function angleBetween(A,B,P){
-    // angle at midpoint between AB and AP to show roughly camera angle relative
-    const mx=(A.x+B.x)/2, my=(A.y+B.y)/2;
-    const v1x = A.x - B.x, v1y = A.y - B.y;
-    const v2x = P.x - mx, v2y = P.y - my;
-    const dot = v1x*v2x + v1y*v2y; const l1=Math.hypot(v1x,v1y)||1; const l2=Math.hypot(v2x,v2y)||1;
-    const cos = Math.max(-1, Math.min(1, dot/(l1*l2)));
-    return Math.acos(cos)*180/Math.PI;
-  }
-
-  function updateSubjectNameUI(subjectId){
-    const subj = state.subjects.find(s=>s.id===subjectId);
-    if(!subj) return;
-
-    // Update on-stage label without re-rendering (prevents input focus loss)
-    const g = layer.querySelector('[data-id="'+subjectId+'"]');
-    if(g){
-      const t = g.querySelector('text[data-name-label="1"]');
-      if(t) t.textContent = subj.name || subj.id;
-    }
-
-    // Update dropdown option display text
-    const aSel = document.getElementById('primaryA');
-    const bSel = document.getElementById('primaryB');
-    [aSel,bSel].forEach(sel=>{
-      if(!sel) return;
-      Array.from(sel.options).forEach(opt=>{
-        if(opt.value===subjectId) opt.textContent = subj.name || subj.id;
-      });
-    });
-  }
-
-  function rebuildList(){
-    const list=document.getElementById('entities-list'); list.innerHTML='';
-    [...state.subjects,...state.cameras].forEach(e=>{
-      const div=document.createElement('div'); div.className='item-line';
-      const left=document.createElement('div');
-      if(e.name!==undefined){
-        const input=document.createElement('input');
-        input.type='text';
-        input.value=e.name;
-        input.style.width='120px';
-        input.oninput=()=>{
-          e.name=input.value;
-          updateSubjectNameUI(e.id);
-        };
-        left.appendChild(input);
-      } else {
-        left.textContent = e.id;
-      }
-      const right=document.createElement('div'); right.innerHTML = `<button data-jump="${e.id}">Jump</button> <button data-delete="${e.id}">Del</button>`;
-      div.appendChild(left); div.appendChild(right); list.appendChild(div);
-    });
-    list.querySelectorAll('button[data-jump]').forEach(b=>{b.onclick=(ev)=>{ const id=ev.target.getAttribute('data-jump'); jumpTo(id);} });
-    list.querySelectorAll('button[data-delete]').forEach(b=>{b.onclick=(ev)=>{ const id=ev.target.getAttribute('data-delete'); deleteEntity(id);} });
-  }
-
-  function jumpTo(id){
-    const ent = [...state.subjects,...state.cameras].find(x=>x.id===id);
-    if(!ent) return;
-
-    // Pan (do not change zoom)
-    state.view.x = ent.x - state.view.w/2;
-    state.view.y = ent.y - state.view.h/2;
-    render();
-  }
-
-  function deleteEntity(id){ state.subjects = state.subjects.filter(s=>s.id!==id); state.cameras = state.cameras.filter(c=>c.id!==id); if(state.selectedA===id) state.selectedA=null; if(state.selectedB===id) state.selectedB=null; render(); }
-
-  // Simple drag implementation for SVG group elements
-  function enableDrag(){
-    let current=null, offset={x:0,y:0};
-    layer.querySelectorAll('g').forEach(g=>{
-      g.style.cursor='grab';
-      g.onmousedown = (ev)=>{
-        state.selectedEntity = g.getAttribute('data-id');
-        ev.preventDefault(); current=g; g.style.cursor='grabbing';
-        const id=g.getAttribute('data-id');
-        const pt=getPointFromEvent(ev);
-        const ent = state.subjects.find(s=>s.id===id) || state.cameras.find(c=>c.id===id);
-        offset.x = pt.x - ent.x; offset.y = pt.y - ent.y;
-        document.onmousemove = (e)=>{
-          const p = getPointFromEvent(e);
-          ent.x = p.x - offset.x; ent.y = p.y - offset.y;
-          render();
-        }
-        document.onmouseup = ()=>{ document.onmousemove=null; document.onmouseup=null; current.style.cursor='grab'; current=null; }
-      }
-    });
-  }
-
-  // Deselect when clicking empty canvas (background)
-  svg.addEventListener('mousedown',(ev)=>{
-    // Only clear selection if clicking directly on the SVG background, not on shapes
-    if(ev.target === svg){
-      state.selectedEntity = null;
-      render();
-    }
-  });
-
-  // Click empty space to clear selection (returns mousewheel to zoom mode)
-  svg.addEventListener('mousedown',(ev)=>{
-    // If click isn't on an entity group, deselect
-    const hit = ev.target && ev.target.closest ? ev.target.closest('g[data-id]') : null;
-    if(!hit){
-      if(state.selectedEntity!==null){
+  // Deselect on background click
+  svg.addEventListener('mousedown', function (ev) {
+    var hit = ev.target && ev.target.closest ? ev.target.closest('g[data-id]') : null;
+    if (!hit) {
+      if (state.selectedEntity !== null) {
         state.selectedEntity = null;
         render();
       }
     }
   }, true);
 
-  svg.addEventListener('wheel',(ev)=>{
+  // Wheel: rotate selected entity or zoom
+  svg.addEventListener('wheel', function (ev) {
     ev.preventDefault();
+    var sel = state.selectedEntity;
 
-    // If a camera is selected, mouse wheel rotates its icon (label remains unrotated)
-    const id = state.selectedEntity;
-    const cam = state.cameras.find(c=>c.id===id);
-    if(cam){
-      cam.rot += ev.deltaY>0 ? 5 : -5;
-      // normalize to keep values reasonable
-      cam.rot = ((cam.rot % 360) + 360) % 360;
+    var subj = state.subjects.find(function (s) { return s.id === sel; });
+    if (subj) {
+      subj.heading = ((subj.heading || 0) + (ev.deltaY > 0 ? 5 : -5)) % 360;
+      if (subj.heading < 0) subj.heading += 360;
       render();
       return;
     }
 
-    // Otherwise: zoom about the mouse cursor
-    const rect = svg.getBoundingClientRect();
-    const vb = state.view;
+    var cam = state.cameras.find(function (c) { return c.id === sel; });
+    if (cam) {
+      cam.rot = ((cam.rot || 0) + (ev.deltaY > 0 ? 5 : -5)) % 360;
+      if (cam.rot < 0) cam.rot += 360;
+      render();
+      return;
+    }
 
-    // mouse position in viewBox (world) coords
-    const nx = (ev.clientX - rect.left) / rect.width;
-    const ny = (ev.clientY - rect.top) / rect.height;
-    const mx = vb.x + nx * vb.w;
-    const my = vb.y + ny * vb.h;
+    // zoom about cursor
+    var rect = svg.getBoundingClientRect();
+    var vb = state.view;
 
-    const factor = ev.deltaY>0 ? 1.12 : 1/1.12;
-    const newW = vb.w * factor;
-    const newH = vb.h * factor;
+    var nx = (ev.clientX - rect.left) / rect.width;
+    var ny = (ev.clientY - rect.top) / rect.height;
+    var mx = vb.x + nx * vb.w;
+    var my = vb.y + ny * vb.h;
 
-    // clamp zoom
-    const minW = 300, maxW = 3600;
-    const clampedW = Math.max(minW, Math.min(maxW, newW));
-    const aspect = vb.h / vb.w;
-    const clampedH = clampedW * aspect;
+    var factor = ev.deltaY > 0 ? 1.12 : 1 / 1.12;
+    var newW = vb.w * factor;
 
-    // keep mouse point stationary in screen space by re-centering the viewBox
-    const kx = (mx - vb.x) / vb.w;
-    const ky = (my - vb.y) / vb.h;
+    var minW = 300, maxW = 3600;
+    var clampedW = Math.max(minW, Math.min(maxW, newW));
+    var aspect = vb.h / vb.w;
+    var clampedH = clampedW * aspect;
+
+    var kx = (mx - vb.x) / vb.w;
+    var ky = (my - vb.y) / vb.h;
 
     state.view.w = clampedW;
     state.view.h = clampedH;
@@ -388,43 +633,94 @@
     state.view.y = my - ky * clampedH;
 
     render();
-  },{passive:false});
+  }, { passive: false });
 
-  function getPointFromEvent(ev){
-    const rect = svg.getBoundingClientRect();
-    const vb = state.view;
-    const nx = (ev.clientX - rect.left) / rect.width;
-    const ny = (ev.clientY - rect.top) / rect.height;
-    const x = vb.x + nx * vb.w;
-    const y = vb.y + ny * vb.h;
-    return {x,y};
+  function enableDrag() {
+    var nodes = layer.querySelectorAll('g[data-id]');
+    for (var i = 0; i < nodes.length; i++) {
+      (function (g) {
+        g.style.cursor = 'grab';
+
+        // click selects
+        g.onclick = function (ev) {
+          ev.stopPropagation();
+          var id = g.getAttribute('data-id');
+          if (state.selectedEntity !== id) {
+            state.selectedEntity = id;
+            render();
+          }
+        };
+
+        // drag moves
+        g.onmousedown = function (ev) {
+          ev.preventDefault();
+          var id = g.getAttribute('data-id');
+          state.selectedEntity = id;
+          render();
+
+          var pt = getPointFromEvent(ev);
+          var ent = state.subjects.find(function (s) { return s.id === id; }) || state.cameras.find(function (c) { return c.id === id; });
+          if (!ent) return;
+
+          var offsetX = pt.x - ent.x;
+          var offsetY = pt.y - ent.y;
+
+          var onMove = function (e) {
+            var p = getPointFromEvent(e);
+            ent.x = p.x - offsetX;
+            ent.y = p.y - offsetY;
+            render();
+          };
+
+          var onUp = function () {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        };
+      })(nodes[i]);
+    }
   }
 
-  // Keyboard quick actions
-  window.addEventListener('keydown', (e)=>{
-    // Ignore shortcuts while typing in inputs or selects
-    const t = e.target;
-    if(t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.tagName==='SELECT' || t.isContentEditable)){
-      return;
-    }
-    // Ignore shortcuts while typing in inputs, textareas, selects, or contenteditable elements
-    const ae = document.activeElement;
-    if(ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)){
-      return; // let the keystroke go to the focused element
-    }
+  // keyboard shortcuts
+  window.addEventListener('keydown', function (e) {
+    var ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return;
 
-    if(e.key==='Escape'){
-      state.selectedEntity = null;
-      render();
-      return;
-    }
-    if(e.key==='Delete' || e.key==='Backspace'){ // delete last camera
-      state.cameras.pop(); render();
-    }
-    if(e.key==='s'){ addSubject(); }
-    if(e.key==='c'){ addCamera(); }
+    if (e.key === 'Escape') { state.selectedEntity = null; render(); return; }
+    if (e.key === 'Delete' || e.key === 'Backspace') { state.cameras.pop(); render(); return; }
+    if (e.key === 's') { addSubject(); return; }
+    if (e.key === 'c') { addCamera(); return; }
   });
 
+  // --- Simple self-tests (console only) ---
+  function runTests(){
+    function assert(cond, msg){ if(!cond) throw new Error('Test failed: ' + msg); }
+
+    // deltaDeg wrap
+    assert(Math.abs(deltaDeg(350, 10) - 20) < 1e-6, 'deltaDeg wrap 350->10');
+    assert(Math.abs(deltaDeg(10, 350) + 20) < 1e-6, 'deltaDeg wrap 10->350');
+
+    // sectorPath basic shape output
+    var p = sectorPath(0,0,0,25,10);
+    assert(typeof p === 'string' && p.indexOf('M ') === 0 && p.indexOf(' A ') !== -1, 'sectorPath returns path');
+
+    // findEyelineTarget prefers subject in cone
+    var tmpA = {id:'TA', x:0, y:0, heading:0};
+    var tmpB = {id:'TB', x:10, y:0};
+    var tmpC = {id:'TC', x:0, y:10};
+    var saved = state.subjects;
+    state.subjects = [tmpA,tmpB,tmpC];
+    state.eyelineHalfAngleDeg = 25;
+    assert(findEyelineTarget(tmpA) === tmpB, 'findEyelineTarget chooses ahead subject');
+    state.subjects = saved;
+  }
+
+  try { runTests(); } catch (e) { console.error(e); }
+
+  // initial render
   render();
 })();
 </script>
